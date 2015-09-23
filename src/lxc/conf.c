@@ -99,6 +99,8 @@ lxc_log_define(lxc_conf, lxc);
 #define MAXMTULEN   16
 #define MAXLINELEN  128
 
+#define index(a,b) strchr((a),(b))
+
 #if HAVE_SYS_CAPABILITY_H
 #ifndef CAP_SETFCAP
 #define CAP_SETFCAP 31
