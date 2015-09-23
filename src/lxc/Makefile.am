@@ -125,6 +125,10 @@ AM_CFLAGS=-I$(top_srcdir)/src \
 	-DRUNTIME_PATH=\"$(RUNTIME_PATH)\" \
 	-DSBINDIR=\"$(SBINDIR)\"
 
+if IS_BIONIC
+AM_CFLAGS += -fPIE -pie
+endif
+
 if ENABLE_APPARMOR
 AM_CFLAGS += -DHAVE_APPARMOR
 endif
