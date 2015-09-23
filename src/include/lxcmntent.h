@@ -23,7 +23,6 @@
 
 #include <../config.h>
 
-#if IS_BIONIC
 struct mntent
 {
     char* mnt_fsname;
@@ -36,18 +35,8 @@ struct mntent
 
 extern struct mntent *getmntent (FILE *stream);
 extern struct mntent *getmntent_r (FILE *stream, struct mntent *mp, char *buffer, int bufsiz);
-#endif
-
-#ifndef HAVE_SETMNTENT
 FILE *setmntent (const char *file, const char *mode);
-#endif
-
-#ifndef HAVE_ENDMNTENT
 int endmntent (FILE *stream);
-#endif
-
-#ifndef HAVE_HASMNTOPT
 extern char *hasmntopt (const struct mntent *mnt, const char *opt);
-#endif
 
 #endif
