@@ -64,6 +64,7 @@ $(LOCAL_PATH)/../../$(TARGET_OUT_SHARED_LIBRARIES)/liblxc.so: $(TARGET_OUT_INTER
 		--disable-lua \
 		--disable-python \
 		--disable-bash \
+		--enable-configpath-log \
 		--prefix=/system/maru/lxc \
 		--with-runtime-path=/cache/ \
 		--with-config-path=/data/maru/containers/ \
