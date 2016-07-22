@@ -1,0 +1,11 @@
+This is a fork of the Linux Containers (LXC) project for Maru OS.
+
+The main build config for integrating LXC into Maru OS can be found in the
+toplevel Android.mk file. Most of the custom coniguration to support LXC in an
+Android-based environment can be found there.
+
+Modifications to LXC source code are kept to a bare minimum and are made with
+upstreaming in mind.
+
+For more info on LXC, please see the README and the LXC project website
+https://linuxcontainers.org/lxc/.
