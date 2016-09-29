@@ -23,6 +23,7 @@
 
 #include "config.h"
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
