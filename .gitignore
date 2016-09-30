@@ -72,7 +72,6 @@ src/lxc/lxc-usernsexec
 src/lxc/lxc-wait
 src/lxc/legacy/lxc-ls
 src/lxc/lxc-user-nic
-src/lxc/version.h
 
 src/python-lxc/setup.py
 src/python-lxc/build/
@@ -130,7 +129,6 @@ doc/api/html/*
 
 m4/
 
-src/config.h
 src/config.h.in
 src/stamp-h1
 
