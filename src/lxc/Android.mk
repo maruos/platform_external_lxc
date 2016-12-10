@@ -106,6 +106,20 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
 LOCAL_SHARED_LIBRARIES := liblxc
 include $(BUILD_EXECUTABLE)
 
+include $(CLEAR_VARS)
+LOCAL_MODULE := lxc-console
+LOCAL_SRC_FILES := lxc_console.c
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
+LOCAL_SHARED_LIBRARIES := liblxc
+include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := lxc-attach
+LOCAL_SRC_FILES := lxc_attach.c
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
+LOCAL_SHARED_LIBRARIES := liblxc
+include $(BUILD_EXECUTABLE)
+
 # -----------------------------------------------------------------------------
 #  LXC rootfs mount (required!)
 
