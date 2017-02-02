@@ -1843,7 +1843,9 @@ static int setup_dev_console(const struct lxc_rootfs *rootfs,
 		return -1;
 	}
 
-	if (safe_mount(console->name, path, "none", MS_BIND, 0, rootfs->mount)) {
+	// maru: dropping safe_mount b/c it causes problems on some Android kernels
+	//if (safe_mount(console->name, path, "none", MS_BIND, 0, rootfs->mount)) {
+	if (mount(console->name, path, "none", MS_BIND, 0)) {
 		ERROR("failed to mount '%s' on '%s'", console->name, path);
 		return -1;
 	}
