@@ -97,6 +97,15 @@ EOF
        [ "${r#nameserver}" = "$r" ] || echo "$r"
     done < /etc/resolv.conf > "${rootfs_path}/etc/resolv.conf"
 
+    # network configuration
+    cat > "${rootfs_path}/etc/systemd/network/eth0.network" << EOF
+[Match]
+Name=eth0
+
+[Network]
+DHCP=ipv4
+EOF
+
     # chroot and configure system
     arch-chroot "${rootfs_path}" /bin/bash -s << EOF
 mkdir /run/lock
@@ -113,9 +122,18 @@ done
 ln -s /lib/systemd/system/multi-user.target /etc/systemd/system/default.target
 # enable sigpwr signal handling in systemd as otherwise lxc-stop won't work
 ln -s /usr/lib/systemd/system/poweroff.target /etc/systemd/system/sigpwr.target
+# fix systemd-sysctl service
+sed -e 's/^ConditionPathIsReadWrite=\/proc\/sys\/$/ConditionPathIsReadWrite=\/proc\/sys\/net\//' \
+    -e 's/^ExecStart=\/usr\/lib\/systemd\/systemd-sysctl$/ExecStart=\/usr\/lib\/systemd\/systemd-sysctl --prefix net/' \
+    -i /usr/lib/systemd/system/systemd-sysctl.service
 # initialize pacman keyring
 pacman-key --init
 pacman-key --populate archlinux
+
+# enable networkd
+systemctl enable systemd-networkd
+systemctl enable systemd-resolved
+ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 EOF
     return 0
 }

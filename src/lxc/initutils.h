@@ -20,31 +20,34 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef __LXC_SYNC_H
-#define __LXC_SYNC_H
 
-struct lxc_handler;
+#ifndef __LXC_INITUTILS_H
+#define __LXC_INITUTILS_H
 
-enum {
-	LXC_SYNC_STARTUP,
-	LXC_SYNC_CONFIGURE,
-	LXC_SYNC_POST_CONFIGURE,
-	LXC_SYNC_CGROUP,
-	LXC_SYNC_POST_CGROUP,
-	LXC_SYNC_RESTART,
-	LXC_SYNC_POST_RESTART,
-	LXC_SYNC_ERROR = -1 /* Used to report errors from another process */
-};
+#include <errno.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mount.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <fcntl.h>
 
-int lxc_sync_init(struct lxc_handler *handler);
-void lxc_sync_fini(struct lxc_handler *);
-void lxc_sync_fini_parent(struct lxc_handler *);
-void lxc_sync_fini_child(struct lxc_handler *);
-int lxc_sync_wake_child(struct lxc_handler *, int);
-int lxc_sync_wait_child(struct lxc_handler *, int);
-int lxc_sync_wake_parent(struct lxc_handler *, int);
-int lxc_sync_wait_parent(struct lxc_handler *, int);
-int lxc_sync_barrier_parent(struct lxc_handler *, int);
-int lxc_sync_barrier_child(struct lxc_handler *, int);
 
-#endif
+#include "config.h"
+
+#define DEFAULT_VG "lxc"
+#define DEFAULT_THIN_POOL "lxc"
+#define DEFAULT_ZFSROOT "lxc"
+
+extern void lxc_setup_fs(void);
+extern const char *lxc_global_config_value(const char *option_name);
+
+/* open a file with O_CLOEXEC */
+extern void remove_trailing_slashes(char *p);
+FILE *fopen_cloexec(const char *path, const char *mode);
+
+#endif /* __LXC_INITUTILS_H */

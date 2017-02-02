@@ -40,7 +40,6 @@
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <netinet/in.h>
-#include <linux/if_bridge.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
@@ -133,8 +132,7 @@ static int get_alloted(char *me, char *intype, char *link)
 		return n;
 	}
 	fclose(fin);
-	if (line)
-		free(line);
+	free(line);
 	return -1;
 }
 

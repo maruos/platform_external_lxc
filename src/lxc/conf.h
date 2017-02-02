@@ -389,7 +389,7 @@ extern int do_rootfs_setup(struct lxc_conf *conf, const char *name,
 struct cgroup_process_info;
 extern int lxc_setup(struct lxc_handler *handler);
 
-extern void lxc_rename_phys_nics_on_shutdown(int netnsfd, struct lxc_conf *conf);
+extern void lxc_restore_phys_nics_to_netns(int netnsfd, struct lxc_conf *conf);
 
 extern int find_unmapped_nsuid(struct lxc_conf *conf, enum idtype idtype);
 extern int mapped_hostid(unsigned id, struct lxc_conf *conf, enum idtype idtype);
@@ -401,4 +401,5 @@ extern int parse_mntopts(const char *mntopts, unsigned long *mntflags,
 extern void tmp_proc_unmount(struct lxc_conf *lxc_conf);
 void remount_all_slave(void);
 extern void suggest_default_idmap(void);
+struct lxc_list *sort_cgroup_settings(struct lxc_list* cgroup_settings);
 #endif

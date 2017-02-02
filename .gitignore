@@ -7,6 +7,7 @@
 *.conf
 *~
 *.gz
+*.swp
 
 .deps
 .libs
@@ -137,3 +138,7 @@ patches
 *.orig
 *.rej
 tags
+TAGS
+
+doc/api/doxygen_sqlite3.db
+doc/api/*.tmp

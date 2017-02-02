@@ -72,7 +72,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
     <para>
       Each option in the configuration file has the form <command>key
       = value</command> fitting in one line. The '#' character means
-      the line is a comment.
+      the line is a comment. List options, like capabilities and cgroups
+      options, can be used with no value to clear any previously
+      defined values of that option.
     </para>
 
     <refsect2>
@@ -213,6 +215,16 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
         network interface.
       </para>
       <variablelist>
+        <varlistentry>
+          <term>
+            <option>lxc.network</option>
+          </term>
+          <listitem>
+            <para>
+              may be used without a value to clear all previous network options.
+            </para>
+          </listitem>
+        </varlistentry>
         <varlistentry>
           <term>
             <option>lxc.network.type</option>
@@ -627,7 +639,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
         <filename>/dev</filename> to be set up as needed in the container
         rootfs.  If lxc.autodev is set to 1, then after mounting the container's
         rootfs LXC will mount a fresh tmpfs under <filename>/dev</filename>
-        (limited to 100k) and fill in a minimal set of initial devices.
+        (limited to 500k) and fill in a minimal set of initial devices.
         This is generally required when starting a container containing
         a "systemd" based "init" but may be optional at other times.  Additional
         devices in the containers /dev directory may be created through the
@@ -676,6 +688,18 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
         container. This is useful to mount /etc, /var or /home for
         examples.
       </para>
+      <para>
+	NOTE - LXC will generally ensure that mount targets and relative
+	bind-mount sources are properly confined under the container
+	root, to avoid attacks involving over-mounting host directories
+	and files.  (Symbolic links in absolute mount sources are ignored)
+	However, if the container configuration first mounts a directory which
+	is under the control of the container user, such as /home/joe, into
+        the container at some <filename>path</filename>, and then mounts
+        under <filename>path</filename>, then a TOCTTOU attack would be
+        possible where the container user modifies a symbolic link under
+        his home directory at just the right time.
+      </para>
       <variablelist>
         <varlistentry>
           <term>
@@ -719,6 +743,11 @@ proc proc proc nodev,noexec,nosuid 0 0
             <para>
               specify a mount point corresponding to a line in the
               fstab format.
+
+              Moreover lxc add two options to mount.
+              <option>optional</option> don't fail if mount does not work.
+              <option>create=dir</option> or <option>create=file</option>
+              to create dir (or file) when the point will be mounted.
             </para>
           </listitem>
         </varlistentry>
@@ -998,7 +1027,9 @@ proc proc proc nodev,noexec,nosuid 0 0
               <citerefentry>
                 <refentrytitle><command>capabilities</command></refentrytitle>
                 <manvolnum>7</manvolnum>
-              </citerefentry>,
+              </citerefentry>.
+              If used with no value, lxc will clear any drop capabilities
+              specified up to this point.
             </para>
           </listitem>
         </varlistentry>

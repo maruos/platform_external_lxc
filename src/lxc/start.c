@@ -120,35 +120,51 @@ static void close_ns(int ns_fd[LXC_NS_MAX]) {
 	}
 }
 
-static int preserve_ns(int ns_fd[LXC_NS_MAX], int clone_flags) {
-	int i, saved_errno;
+/*
+ * preserve_ns: open /proc/@pid/ns/@ns for each namespace specified
+ * in clone_flags.
+ * Return true on success, false on failure.  On failure, leave an error
+ * message in *errmsg, which caller must free.
+ */
+static
+bool preserve_ns(int ns_fd[LXC_NS_MAX], int clone_flags, pid_t pid, char **errmsg) {
+	int i, ret;
 	char path[MAXPATHLEN];
 
 	for (i = 0; i < LXC_NS_MAX; i++)
 		ns_fd[i] = -1;
 
-	if (access("/proc/self/ns", X_OK)) {
-		WARN("Kernel does not support attach; preserve_ns ignored");
-		return 0;
+	snprintf(path, MAXPATHLEN, "/proc/%d/ns", pid);
+	if (access(path, X_OK)) {
+		if (asprintf(errmsg, "Kernel does not support setns.") == -1)
+			*errmsg = NULL;
+		return false;
 	}
 
 	for (i = 0; i < LXC_NS_MAX; i++) {
 		if ((clone_flags & ns_info[i].clone_flag) == 0)
 			continue;
-		snprintf(path, MAXPATHLEN, "/proc/self/ns/%s", ns_info[i].proc_name);
+		snprintf(path, MAXPATHLEN, "/proc/%d/ns/%s", pid,
+		         ns_info[i].proc_name);
 		ns_fd[i] = open(path, O_RDONLY | O_CLOEXEC);
 		if (ns_fd[i] < 0)
 			goto error;
 	}
 
-	return 0;
+	return true;
 
 error:
-	saved_errno = errno;
+	if (errno == ENOENT) {
+		ret = asprintf(errmsg, "Kernel does not support setns for %s",
+			ns_info[i].proc_name);
+	} else {
+		ret = asprintf(errmsg, "Failed to open %s: %s",
+			path, strerror(errno));
+	}
+	if (ret == -1)
+		*errmsg = NULL;
 	close_ns(ns_fd);
-	errno = saved_errno;
-	SYSERROR("failed to open '%s'", path);
-	return -1;
+	return false;
 }
 
 static int attach_ns(const int ns_fd[LXC_NS_MAX]) {
@@ -175,7 +191,7 @@ static int match_fd(int fd)
 
 int lxc_check_inherited(struct lxc_conf *conf, int fd_to_ignore)
 {
-	struct dirent dirent, *direntp;
+	struct dirent *direntp;
 	int fd, fddir;
 	DIR *dir;
 
@@ -188,7 +204,7 @@ restart:
 
 	fddir = dirfd(dir);
 
-	while (!readdir_r(dir, &dirent, &direntp)) {
+	while ((direntp = readdir(dir))) {
 		if (!direntp)
 			break;
 
@@ -358,6 +374,7 @@ out_sigfd:
 
 struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf, const char *lxcpath)
 {
+	int i;
 	struct lxc_handler *handler;
 
 	handler = malloc(sizeof(*handler));
@@ -369,6 +386,9 @@ struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf, const char
 	handler->conf = conf;
 	handler->lxcpath = lxcpath;
 	handler->pinfd = -1;
+
+	for (i = 0; i < LXC_NS_MAX; i++)
+		handler->nsfd[i] = -1;
 
 	lsm_init();
 
@@ -393,16 +413,16 @@ struct lxc_handler *lxc_init(const char *name, struct lxc_conf *conf, const char
 	}
 
 	/* Start of environment variable setup for hooks */
-	if (setenv("LXC_NAME", name, 1)) {
+	if (name && setenv("LXC_NAME", name, 1)) {
 		SYSERROR("failed to set environment variable for container name");
 	}
-	if (setenv("LXC_CONFIG_FILE", conf->rcfile, 1)) {
+	if (conf->rcfile && setenv("LXC_CONFIG_FILE", conf->rcfile, 1)) {
 		SYSERROR("failed to set environment variable for config path");
 	}
-	if (setenv("LXC_ROOTFS_MOUNT", conf->rootfs.mount, 1)) {
+	if (conf->rootfs.mount && setenv("LXC_ROOTFS_MOUNT", conf->rootfs.mount, 1)) {
 		SYSERROR("failed to set environment variable for rootfs mount");
 	}
-	if (setenv("LXC_ROOTFS_PATH", conf->rootfs.path, 1)) {
+	if (conf->rootfs.path && setenv("LXC_ROOTFS_PATH", conf->rootfs.path, 1)) {
 		SYSERROR("failed to set environment variable for rootfs mount");
 	}
 	if (conf->console.path && setenv("LXC_CONSOLE", conf->console.path, 1)) {
@@ -465,10 +485,19 @@ out_free:
 
 static void lxc_fini(const char *name, struct lxc_handler *handler)
 {
+	int i;
+
 	/* The STOPPING state is there for future cleanup code
 	 * which can take awhile
 	 */
 	lxc_set_state(name, handler, STOPPING);
+
+	for (i = 0; i < LXC_NS_MAX; i++) {
+		if (handler->nsfd[i] != -1) {
+			close(handler->nsfd[i]);
+			handler->nsfd[i] = -1;
+		}
+	}
 	lxc_set_state(name, handler, STOPPED);
 
 	if (run_lxc_hooks(name, "post-stop", handler->conf, handler->lxcpath, NULL))
@@ -508,10 +537,10 @@ static void lxc_abort(const char *name, struct lxc_handler *handler)
  */
 static int container_reboot_supported(void *arg)
 {
-        int *cmd = arg;
+	int *cmd = arg;
 	int ret;
 
-        ret = reboot(*cmd);
+	ret = reboot(*cmd);
 	if (ret == -1 && errno == EINVAL)
 		return 1;
 	return 0;
@@ -521,10 +550,10 @@ static int must_drop_cap_sys_boot(struct lxc_conf *conf)
 {
 	FILE *f;
 	int ret, cmd, v, flags;
-        long stack_size = 4096;
-        void *stack = alloca(stack_size);
-        int status;
-        pid_t pid;
+	long stack_size = 4096;
+	void *stack = alloca(stack_size);
+	int status;
+	pid_t pid;
 
 	f = fopen("/proc/sys/kernel/ctrl-alt-del", "r");
 	if (!f) {
@@ -618,13 +647,14 @@ static int do_start(void *data)
 {
 	struct lxc_handler *handler = data;
 	const char *lsm_label = NULL;
+	int ret = 0;
 
 	if (sigprocmask(SIG_SETMASK, &handler->oldmask, NULL)) {
 		SYSERROR("failed to set sigprocmask");
 		return -1;
 	}
 
-        /* This prctl must be before the synchro, so if the parent
+	/* This prctl must be before the synchro, so if the parent
 	 * dies before we set the parent death signal, we will detect
 	 * its death with the synchro right after, otherwise we have
 	 * a window where the parent can exit before we set the pdeath
@@ -640,6 +670,20 @@ static int do_start(void *data)
 	/* don't leak the pinfd to the container */
 	if (handler->pinfd >= 0) {
 		close(handler->pinfd);
+	}
+
+	if (lxc_sync_wait_parent(handler, LXC_SYNC_STARTUP))
+		return -1;
+
+	/* Unshare CLONE_NEWNET after CLONE_NEWUSER  - see
+	  https://github.com/lxc/lxd/issues/1978 */
+	if ((handler->clone_flags & (CLONE_NEWNET | CLONE_NEWUSER)) ==
+			(CLONE_NEWNET | CLONE_NEWUSER)) {
+		ret = unshare(CLONE_NEWNET);
+		if (ret < 0) {
+			SYSERROR("Error unsharing network namespace");
+			goto out_warn_father;
+		}
 	}
 
 	/* Tell the parent task it can begin to configure the
@@ -746,16 +790,20 @@ static int do_start(void *data)
 	handler->ops->start(handler, handler->data);
 
 out_warn_father:
-	/* we want the parent to know something went wrong, so any
-	 * value other than what it expects is ok. */
-	lxc_sync_wake_parent(handler, LXC_SYNC_POST_CONFIGURE);
+	/* we want the parent to know something went wrong, so we return a special
+	 * error code. */
+	lxc_sync_wake_parent(handler, LXC_SYNC_ERROR);
 	return -1;
 }
 
 static int save_phys_nics(struct lxc_conf *conf)
 {
 	struct lxc_list *iterator;
+	int am_root = (getuid() == 0);
 
+	if (!am_root)
+		return 0;
+		
 	lxc_list_for_each(iterator, &conf->network) {
 		struct lxc_netdev *netdev = iterator->elem;
 
@@ -786,9 +834,10 @@ static int lxc_spawn(struct lxc_handler *handler)
 {
 	int failed_before_rename = 0;
 	const char *name = handler->name;
+	char *errmsg = NULL;
 	bool cgroups_connected = false;
 	int saved_ns_fd[LXC_NS_MAX];
-	int preserve_mask = 0, i;
+	int preserve_mask = 0, i, flags;
 	int netpipepair[2], nveths;
 
 	netpipe = -1;
@@ -877,8 +926,12 @@ static int lxc_spawn(struct lxc_handler *handler)
 			INFO("failed to pin the container's rootfs");
 	}
 
-	if (preserve_ns(saved_ns_fd, preserve_mask) < 0)
+	if (!preserve_ns(saved_ns_fd, preserve_mask, getpid(), &errmsg)) {
+		SYSERROR("Failed to preserve requested namespaces: %s",
+			errmsg ? errmsg : "(Out of memory)");
+		free(errmsg);
 		goto out_delete_net;
+	}
 	if (attach_ns(handler->conf->inherit_ns_fd) < 0)
 		goto out_delete_net;
 
@@ -892,10 +945,19 @@ static int lxc_spawn(struct lxc_handler *handler)
 	}
 
 	/* Create a process in a new set of namespaces */
+	flags = handler->clone_flags;
+	if (handler->clone_flags & CLONE_NEWUSER)
+		flags &= ~CLONE_NEWNET;
 	handler->pid = lxc_clone(do_start, handler, handler->clone_flags);
 	if (handler->pid < 0) {
 		SYSERROR("failed to fork into a new namespace");
 		goto out_delete_net;
+	}
+
+	if (!preserve_ns(handler->nsfd, handler->clone_flags | preserve_mask, handler->pid, &errmsg)) {
+		INFO("Failed to store namespace references for stop hook: %s",
+			errmsg ? errmsg : "(Out of memory)");
+		free(errmsg);
 	}
 
 	if (attach_ns(saved_ns_fd))
@@ -903,8 +965,25 @@ static int lxc_spawn(struct lxc_handler *handler)
 
 	lxc_sync_fini_child(handler);
 
-	if (lxc_sync_wait_child(handler, LXC_SYNC_CONFIGURE))
+	/* map the container uids - the container became an invalid
+	 * userid the moment it was cloned with CLONE_NEWUSER - this
+	 * call doesn't change anything immediately, but allows the
+	 * container to setuid(0) (0 being mapped to something else on
+	 * the host) later to become a valid uid again */
+	if (lxc_map_ids(&handler->conf->id_map, handler->pid)) {
+		ERROR("failed to set up id mapping");
+		goto out_delete_net;
+	}
+
+	if (lxc_sync_wake_child(handler, LXC_SYNC_STARTUP)) {
 		failed_before_rename = 1;
+		goto out_delete_net;
+	}
+
+	if (lxc_sync_wait_child(handler, LXC_SYNC_CONFIGURE)) {
+		failed_before_rename = 1;
+		goto out_delete_net;
+	}
 
 	if (!cgroup_create_legacy(handler)) {
 		ERROR("failed to setup the legacy cgroups for %s", name);
@@ -947,16 +1026,6 @@ static int lxc_spawn(struct lxc_handler *handler)
 			}
 		}
 		close(netpipepair[1]);
-	}
-
-	/* map the container uids - the container became an invalid
-	 * userid the moment it was cloned with CLONE_NEWUSER - this
-	 * call doesn't change anything immediately, but allows the
-	 * container to setuid(0) (0 being mapped to something else on
-	 * the host) later to become a valid uid again */
-	if (lxc_map_ids(&handler->conf->id_map, handler->pid)) {
-		ERROR("failed to set up id mapping");
-		goto out_delete_net;
 	}
 
 	/* Tell the child to continue its initialization.  we'll get
@@ -1084,6 +1153,8 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 		goto out_fini_nonet;
 	}
 
+	handler->conf->reboot = 0;
+
 	netnsfd = get_netns_fd(handler->pid);
 
 	err = lxc_poll(name, handler);
@@ -1103,7 +1174,7 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 	 * lxc-execute which simply exited.  In any case, treat
 	 * it as a 'halt'
 	 */
-        if (WIFSIGNALED(status)) {
+	if (WIFSIGNALED(status)) {
 		switch(WTERMSIG(status)) {
 		case SIGINT: /* halt */
 			DEBUG("Container halting");
@@ -1119,9 +1190,14 @@ int __lxc_start(const char *name, struct lxc_conf *conf,
 			DEBUG("unknown exit status for init: %d", WTERMSIG(status));
 			break;
 		}
-        }
+	}
 
-	lxc_rename_phys_nics_on_shutdown(netnsfd, handler->conf);
+	DEBUG("Pushing physical nics back to host namespace");
+	lxc_restore_phys_nics_to_netns(netnsfd, handler->conf);
+
+	DEBUG("Tearing down virtual network devices used by container");
+	lxc_delete_network(handler);
+
 	if (netnsfd >= 0)
 		close(netnsfd);
 

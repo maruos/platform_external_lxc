@@ -69,7 +69,7 @@ static struct lxc_arguments my_args = {
 lxc-stop stops a container with the identifier NAME\n\
 \n\
 Options :\n\
-  -n, --name=NAME   NAME for name of the container\n\
+  -n, --name=NAME   NAME of the container\n\
   -r, --reboot      reboot the container\n\
   -W, --nowait      don't wait for shutdown or reboot to complete\n\
   -t, --timeout=T   wait T seconds before hard-stopping\n\
@@ -210,6 +210,9 @@ int main(int argc, char *argv[])
 
 	if (!c->is_running(c)) {
 		fprintf(stderr, "%s is not running\n", c->name);
+		/* Per our manpage we need to exit with exit code:
+		 * 2: The specified container exists but was not running.
+		 */
 		ret = 2;
 		goto out;
 	}
