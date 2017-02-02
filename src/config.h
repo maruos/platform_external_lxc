@@ -108,9 +108,6 @@
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
-/* Define to 1 if you have the <sys/capability.h> header file. */
-/* #undef HAVE_SYS_CAPABILITY_H */
-
 /* Define to 1 if you have the <sys/personality.h> header file. */
 #define HAVE_SYS_PERSONALITY_H 1
 
@@ -157,7 +154,7 @@
 #define PACKAGE_NAME "lxc"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "lxc 1.0.7"
+#define PACKAGE_STRING "lxc 1.0.9"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "lxc"
@@ -166,7 +163,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0.7"
+#define PACKAGE_VERSION "1.0.9"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -194,7 +191,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.0.7"
+#define VERSION "1.0.9"
 
 /* Define to 1 if on MINIX. */
 /* #undef _MINIX */

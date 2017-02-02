@@ -38,6 +38,7 @@ LOCAL_SRC_FILES := \
 	cgfs.c \
 	cgroup.c cgroup.h \
 	lxc.h \
+	initutils.c initutils.h \
 	utils.c utils.h \
 	sync.c sync.h \
 	namespace.h namespace.c \
