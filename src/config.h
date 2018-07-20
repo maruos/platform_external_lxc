@@ -34,16 +34,19 @@
 #define HAVE_GETLINE 1
 
 /* Define to 1 if you have the `hasmntopt' function. */
-/* #undef HAVE_HASMNTOPT */
+#define HAVE_HASMNTOPT 1
 
 /* Define to 1 if you have the <ifaddrs.h> header file. */
-/* #undef HAVE_IFADDRS_H */
+#define HAVE_IFADDRS_H 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
 /* Define to 1 if you have the `apparmor' library (-lapparmor). */
 /* #undef HAVE_LIBAPPARMOR */
+
+/* Define to 1 if you have the `gnutls' library (-lgnutls). */
+/* #undef HAVE_LIBGNUTLS */
 
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 /* #undef HAVE_LIBPTHREAD */
@@ -76,7 +79,7 @@
 #define HAVE_PTHREAD_ATFORK 1
 
 /* Define to 1 if you have the <pty.h> header file. */
-/* #undef HAVE_PTY_H */
+#define HAVE_PTY_H 1
 
 /* Define to 1 if you have the `rand_r' function. */
 #define HAVE_RAND_R 1
@@ -141,6 +144,14 @@
 /* bionic libc */
 #define IS_BIONIC 1
 
+/* Define to 1 if `major', `minor', and `makedev' are declared in <mkdev.h>.
+   */
+/* #undef MAJOR_IN_MKDEV */
+
+/* Define to 1 if `major', `minor', and `makedev' are declared in
+   <sysmacros.h>. */
+#define MAJOR_IN_SYSMACROS 1
+
 /* Enabling mutex debugging */
 /* #undef MUTEX_DEBUGGING */
 
@@ -154,7 +165,7 @@
 #define PACKAGE_NAME "lxc"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "lxc 1.0.9"
+#define PACKAGE_STRING "lxc 1.0.11"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "lxc"
@@ -163,7 +174,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0.9"
+#define PACKAGE_VERSION "1.0.11"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -191,7 +202,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.0.9"
+#define VERSION "1.0.11"
 
 /* Define to 1 if on MINIX. */
 /* #undef _MINIX */
