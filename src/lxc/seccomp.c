@@ -92,6 +92,23 @@ static uint32_t get_v2_default_action(char *line)
 	return ret_action;
 }
 
+static const char *get_action_name(uint32_t action)
+{
+	// The upper 16 bits indicate the type of the seccomp action
+	switch(action & 0xffff0000){
+	case SCMP_ACT_KILL:
+		return "kill";
+	case SCMP_ACT_ALLOW:
+		return "allow";
+	case SCMP_ACT_TRAP:
+		return "trap";
+	case SCMP_ACT_ERRNO(0):
+		return "errno";
+	default:
+		return "invalid action";
+	}
+}
+
 static uint32_t get_and_clear_v2_action(char *line, uint32_t def_action)
 {
 	char *p = strchr(line, ' ');
@@ -119,6 +136,7 @@ enum lxc_hostarch_t {
 	lxc_seccomp_arch_all = 0,
 	lxc_seccomp_arch_native,
 	lxc_seccomp_arch_i386,
+	lxc_seccomp_arch_x32,
 	lxc_seccomp_arch_amd64,
 	lxc_seccomp_arch_arm,
 	lxc_seccomp_arch_arm64,
@@ -152,6 +170,7 @@ int get_hostarch(void)
 	}
 	if (strcmp(uts.machine, "i686") == 0)
 		return lxc_seccomp_arch_i386;
+	// no x32 kernels
 	else if (strcmp(uts.machine, "x86_64") == 0)
 		return lxc_seccomp_arch_amd64;
 	else if (strncmp(uts.machine, "armv7", 5) == 0)
@@ -181,6 +200,7 @@ scmp_filter_ctx get_new_ctx(enum lxc_hostarch_t n_arch, uint32_t default_policy_
 
 	switch(n_arch) {
 	case lxc_seccomp_arch_i386: arch = SCMP_ARCH_X86; break;
+	case lxc_seccomp_arch_x32: arch = SCMP_ARCH_X32; break;
 	case lxc_seccomp_arch_amd64: arch = SCMP_ARCH_X86_64; break;
 	case lxc_seccomp_arch_arm: arch = SCMP_ARCH_ARM; break;
 #ifdef SCMP_ARCH_AARCH64
@@ -214,10 +234,15 @@ scmp_filter_ctx get_new_ctx(enum lxc_hostarch_t n_arch, uint32_t default_policy_
 		return NULL;
 	}
 	if (seccomp_attr_set(ctx, SCMP_FLTATR_CTL_NNP, 0)) {
-		ERROR("Failed to turn off n-new-privs.");
+		ERROR("Failed to turn off no-new-privs.");
 		seccomp_release(ctx);
 		return NULL;
 	}
+#ifdef SCMP_FLTATR_ATL_TSKIP
+	if (seccomp_attr_set(ctx, SCMP_FLTATR_ATL_TSKIP, 1)) {
+		WARN("Failed to turn on seccomp nop-skip, continuing");
+	}
+#endif
 	ret = seccomp_arch_add(ctx, arch);
 	if (ret != 0) {
 		ERROR("Seccomp error %d (%s) adding arch: %d", ret,
@@ -273,8 +298,8 @@ bool do_resolve_add_rule(uint32_t arch, char *line, scmp_filter_ctx ctx,
 	}
 	ret = seccomp_rule_add_exact(ctx, action, nr, 0);
 	if (ret < 0) {
-		ERROR("Failed (%d) loading rule for %s (nr %d action %d): %s.",
-		      ret, line, nr, action, strerror(-ret));
+		ERROR("Failed (%d) loading rule for %s (nr %d action %d(%s)): %s.",
+		      ret, line, nr, action, get_action_name(action), strerror(-ret));
 		return false;
 	}
 	return true;
@@ -336,7 +361,10 @@ static int parse_config_v2(FILE *f, char *line, struct lxc_conf *conf)
 		compat_arch[0] = SCMP_ARCH_X86;
 		compat_ctx[0] = get_new_ctx(lxc_seccomp_arch_i386,
 				default_policy_action);
-		if (!compat_ctx[0])
+		compat_arch[1] = SCMP_ARCH_X32;
+		compat_ctx[1] = get_new_ctx(lxc_seccomp_arch_x32,
+				default_policy_action);
+		if (!compat_ctx[0] || !compat_ctx[1])
 			goto bad;
 #ifdef SCMP_ARCH_PPC
 	} else if (native_arch == lxc_seccomp_arch_ppc64) {
@@ -387,9 +415,14 @@ static int parse_config_v2(FILE *f, char *line, struct lxc_conf *conf)
 			return -1;
 		}
 		if (seccomp_attr_set(conf->seccomp_ctx, SCMP_FLTATR_CTL_NNP, 0)) {
-			ERROR("Failed to turn off n-new-privs.");
+			ERROR("Failed to turn off no-new-privs.");
 			return -1;
 		}
+#ifdef SCMP_FLTATR_ATL_TSKIP
+		if (seccomp_attr_set(conf->seccomp_ctx, SCMP_FLTATR_ATL_TSKIP, 1)) {
+			WARN("Failed to turn on seccomp nop-skip, continuing");
+		}
+#endif
 	}
 
 	while (fgets(line, 1024, f)) {
@@ -410,6 +443,13 @@ static int parse_config_v2(FILE *f, char *line, struct lxc_conf *conf)
 					continue;
 				}
 				cur_rule_arch = lxc_seccomp_arch_i386;
+			} else if (strcmp(line, "[x32]") == 0 ||
+				   strcmp(line, "[X32]") == 0) {
+				if (native_arch != lxc_seccomp_arch_amd64) {
+					cur_rule_arch = lxc_seccomp_arch_unknown;
+					continue;
+				}
+				cur_rule_arch = lxc_seccomp_arch_x32;
 			} else if (strcmp(line, "[X86_64]") == 0 ||
 				   strcmp(line, "[x86_64]") == 0) {
 				if (native_arch != lxc_seccomp_arch_amd64) {
@@ -550,7 +590,8 @@ static int parse_config_v2(FILE *f, char *line, struct lxc_conf *conf)
 		if (cur_rule_arch == native_arch ||
 		    cur_rule_arch == lxc_seccomp_arch_native ||
 		    compat_arch[0] == SCMP_ARCH_NATIVE) {
-			INFO("Adding native rule for %s action %d.", line, action);
+			INFO("Adding native rule for %s action %d(%s).", line, action,
+			     get_action_name(action));
 			if (!do_resolve_add_rule(SCMP_ARCH_NATIVE, line, conf->seccomp_ctx, action))
 				goto bad_rule;
 		}
@@ -559,15 +600,18 @@ static int parse_config_v2(FILE *f, char *line, struct lxc_conf *conf)
 				cur_rule_arch == lxc_seccomp_arch_mips64n32 ||
 				cur_rule_arch == lxc_seccomp_arch_mipsel64n32 ? 1 : 0;
 
-			INFO("Adding compat-only rule for %s action %d.", line, action);
+			INFO("Adding compat-only rule for %s action %d(%s).", line, action,
+			     get_action_name(action));
 			if (!do_resolve_add_rule(compat_arch[arch_index], line, compat_ctx[arch_index], action))
 				goto bad_rule;
 		}
 		else {
-			INFO("Adding native rule for %s action %d.", line, action);
+			INFO("Adding native rule for %s action %d(%s).", line, action,
+			     get_action_name(action));
 			if (!do_resolve_add_rule(SCMP_ARCH_NATIVE, line, conf->seccomp_ctx, action))
 				goto bad_rule;
-			INFO("Adding compat rule for %s action %d.", line, action);
+			INFO("Adding compat rule for %s action %d(%s).", line, action,
+			     get_action_name(action));
 			if (!do_resolve_add_rule(compat_arch[0], line, compat_ctx[0], action))
 				goto bad_rule;
 			if (compat_arch[1] != SCMP_ARCH_NATIVE &&
@@ -608,9 +652,9 @@ static int parse_config_v2(FILE *f, char *line, struct lxc_conf *conf)
  * The first line of the config file has a policy language version
  * the second line has some directives
  * then comes policy subject to the directives
- * right now version must be '1'
- * the directives must include 'whitelist' (only type of policy currently
- * supported) and can include 'debug' (though debug is not yet supported).
+ * right now version must be '1' or '2'
+ * the directives must include 'whitelist'(version == 1 or 2) or 'blacklist'
+ * (version == 2) and can include 'debug' (though debug is not yet supported).
  */
 static int parse_config(FILE *f, struct lxc_conf *conf)
 {
@@ -704,7 +748,7 @@ int lxc_read_seccomp_config(struct lxc_conf *conf)
 		return -1;
 	}
 
-/* turn of no-new-privs.  We don't want it in lxc, and it breaks
+/* turn off no-new-privs.  We don't want it in lxc, and it breaks
  * with apparmor */
 #if HAVE_SCMP_FILTER_CTX
 	check_seccomp_attr_set = seccomp_attr_set(conf->seccomp_ctx, SCMP_FLTATR_CTL_NNP, 0);
@@ -712,9 +756,14 @@ int lxc_read_seccomp_config(struct lxc_conf *conf)
 	check_seccomp_attr_set = seccomp_attr_set(SCMP_FLTATR_CTL_NNP, 0);
 #endif
 	if (check_seccomp_attr_set) {
-		ERROR("Failed to turn off n-new-privs.");
+		ERROR("Failed to turn off no-new-privs.");
 		return -1;
 	}
+#ifdef SCMP_FLTATR_ATL_TSKIP
+	if (seccomp_attr_set(conf->seccomp_ctx, SCMP_FLTATR_ATL_TSKIP, 1)) {
+		WARN("Failed to turn on seccomp nop-skip, continuing");
+	}
+#endif
 
 	f = fopen(conf->seccomp, "r");
 	if (!f) {

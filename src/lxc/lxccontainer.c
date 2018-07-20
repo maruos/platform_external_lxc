@@ -56,6 +56,14 @@
 #include "namespace.h"
 #include "lxclock.h"
 
+/* major()/minor() */
+#ifdef MAJOR_IN_MKDEV
+#    include <sys/mkdev.h>
+#endif
+#ifdef MAJOR_IN_SYSMACROS
+#    include <sys/sysmacros.h>
+#endif
+
 #if HAVE_IFADDRS_H
 #include <ifaddrs.h>
 #else
@@ -2671,7 +2679,11 @@ static struct lxc_container *lxcapi_clone(struct lxc_container *c, const char *n
 	fclose(fout);
 	c->lxc_conf->rootfs.path = origroot;
 
-	sprintf(newpath, "%s/%s/rootfs", lxcpath, newname);
+	ret = snprintf(newpath, MAXPATHLEN, "%s/%s/rootfs", lxcpath, newname);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		SYSERROR("clone: failed making rootfs pathname");
+		goto out;
+	}
 	if (mkdir(newpath, 0755) < 0) {
 		SYSERROR("error creating %s", newpath);
 		goto out;
@@ -3576,7 +3588,10 @@ int list_active_containers(const char *lxcpath, char ***nret,
 		*p2 = '\0';
 
 		if (is_hashed) {
-			if (strncmp(lxcpath, lxc_cmd_get_lxcpath(p), lxcpath_len) != 0)
+			char *recvpath = lxc_cmd_get_lxcpath(p);
+			if (!recvpath)
+				continue;
+			if (strncmp(lxcpath, recvpath, lxcpath_len) != 0)
 				continue;
 			p = lxc_cmd_get_name(p);
 		}

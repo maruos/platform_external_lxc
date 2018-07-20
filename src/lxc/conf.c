@@ -39,6 +39,15 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
+
+/* makedev() */
+#ifdef MAJOR_IN_MKDEV
+#    include <sys/mkdev.h>
+#endif
+#ifdef MAJOR_IN_SYSMACROS
+#    include <sys/sysmacros.h>
+#endif
+
 #ifdef HAVE_STATVFS
 #include <sys/statvfs.h>
 #endif
@@ -122,6 +131,14 @@ lxc_log_define(lxc_conf, lxc);
 
 #ifndef LO_FLAGS_AUTOCLEAR
 #define LO_FLAGS_AUTOCLEAR 4
+#endif
+
+#ifndef CAP_SETUID
+#define CAP_SETUID 7
+#endif
+
+#ifndef CAP_SETGID
+#define CAP_SETGID 6
 #endif
 
 /* needed for cgroup automount checks, regardless of whether we
@@ -219,31 +236,31 @@ static  instantiate_cb netdev_deconf[LXC_NET_MAXCONFTYPE + 1] = {
 };
 
 static struct mount_opt mount_opt[] = {
-	{ "defaults",      0, 0              },
-	{ "ro",            0, MS_RDONLY      },
-	{ "rw",            1, MS_RDONLY      },
-	{ "suid",          1, MS_NOSUID      },
-	{ "nosuid",        0, MS_NOSUID      },
-	{ "dev",           1, MS_NODEV       },
-	{ "nodev",         0, MS_NODEV       },
-	{ "exec",          1, MS_NOEXEC      },
-	{ "noexec",        0, MS_NOEXEC      },
-	{ "sync",          0, MS_SYNCHRONOUS },
 	{ "async",         1, MS_SYNCHRONOUS },
-	{ "dirsync",       0, MS_DIRSYNC     },
-	{ "remount",       0, MS_REMOUNT     },
-	{ "mand",          0, MS_MANDLOCK    },
-	{ "nomand",        1, MS_MANDLOCK    },
 	{ "atime",         1, MS_NOATIME     },
-	{ "noatime",       0, MS_NOATIME     },
-	{ "diratime",      1, MS_NODIRATIME  },
-	{ "nodiratime",    0, MS_NODIRATIME  },
 	{ "bind",          0, MS_BIND        },
+	{ "defaults",      0, 0              },
+	{ "dev",           1, MS_NODEV       },
+	{ "diratime",      1, MS_NODIRATIME  },
+	{ "dirsync",       0, MS_DIRSYNC     },
+	{ "exec",          1, MS_NOEXEC      },
+	{ "mand",          0, MS_MANDLOCK    },
+	{ "noatime",       0, MS_NOATIME     },
+	{ "nodev",         0, MS_NODEV       },
+	{ "nodiratime",    0, MS_NODIRATIME  },
+	{ "noexec",        0, MS_NOEXEC      },
+	{ "nomand",        1, MS_MANDLOCK    },
+	{ "norelatime",    1, MS_RELATIME    },
+	{ "nostrictatime", 1, MS_STRICTATIME },
+	{ "nosuid",        0, MS_NOSUID      },
 	{ "rbind",         0, MS_BIND|MS_REC },
 	{ "relatime",      0, MS_RELATIME    },
-	{ "norelatime",    1, MS_RELATIME    },
+	{ "remount",       0, MS_REMOUNT     },
+	{ "ro",            0, MS_RDONLY      },
+	{ "rw",            1, MS_RDONLY      },
 	{ "strictatime",   0, MS_STRICTATIME },
-	{ "nostrictatime", 1, MS_STRICTATIME },
+	{ "suid",          1, MS_NOSUID      },
+	{ "sync",          0, MS_SYNCHRONOUS },
 	{ NULL,            0, 0              },
 };
 
@@ -2660,7 +2677,7 @@ static int setup_hw_addr(char *hwaddr, const char *ifname)
 {
 	struct sockaddr sockaddr;
 	struct ifreq ifr;
-	int ret, fd;
+	int ret, fd, saved_errno;
 
 	ret = lxc_convert_mac(hwaddr, &sockaddr);
 	if (ret) {
@@ -2680,9 +2697,10 @@ static int setup_hw_addr(char *hwaddr, const char *ifname)
 	}
 
 	ret = ioctl(fd, SIOCSIFHWADDR, &ifr);
+	saved_errno = errno;
 	close(fd);
 	if (ret)
-		ERROR("ioctl failure : %s", strerror(errno));
+		ERROR("ioctl failure : %s", strerror(saved_errno));
 
 	DEBUG("mac address '%s' on '%s' has been setup", hwaddr, ifr.ifr_name);
 
@@ -2988,9 +3006,9 @@ struct lxc_conf *lxc_conf_init(void)
 	struct lxc_conf *new;
 	int i;
 
-	new = 	malloc(sizeof(*new));
+	new = malloc(sizeof(*new));
 	if (!new) {
-		ERROR("lxc_conf_init : %m");
+		ERROR("lxc_conf_init : %s", strerror(errno));
 		return NULL;
 	}
 	memset(new, 0, sizeof(*new));
@@ -3011,7 +3029,7 @@ struct lxc_conf *lxc_conf_init(void)
 	new->maincmd_fd = -1;
 	new->rootfs.mount = strdup(default_rootfs_mount);
 	if (!new->rootfs.mount) {
-		ERROR("lxc_conf_init : %m");
+		ERROR("lxc_conf_init : %s", strerror(errno));
 		free(new);
 		return NULL;
 	}
@@ -3536,6 +3554,10 @@ int lxc_assign_network(struct lxc_list *network, pid_t pid)
 		if (netdev->type == LXC_NET_VETH && !am_root) {
 			if (unpriv_assign_nic(netdev, pid))
 				return -1;
+
+			if (netdev->mtu)
+				INFO("mtu ignored due to insufficient privilege");
+
 			// lxc-user-nic has moved the nic to the new ns.
 			// unpriv_assign_nic() fills in netdev->name.
 			// netdev->ifindex will be filed in at setup_netdev.
@@ -3568,27 +3590,33 @@ int lxc_assign_network(struct lxc_list *network, pid_t pid)
 static int write_id_mapping(enum idtype idtype, pid_t pid, const char *buf,
 			    size_t buf_size)
 {
-	char path[PATH_MAX];
-	int ret, closeret;
-	FILE *f;
+	char path[MAXPATHLEN];
+	int fd, ret;
 
-	ret = snprintf(path, PATH_MAX, "/proc/%d/%cid_map", pid, idtype == ID_TYPE_UID ? 'u' : 'g');
-	if (ret < 0 || ret >= PATH_MAX) {
-		fprintf(stderr, "%s: path name too long\n", __func__);
+	ret = snprintf(path, MAXPATHLEN, "/proc/%d/%cid_map", pid,
+		       idtype == ID_TYPE_UID ? 'u' : 'g');
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		ERROR("failed to create path \"%s\"", path);
 		return -E2BIG;
 	}
-	f = fopen(path, "w");
-	if (!f) {
-		perror("open");
-		return -EINVAL;
+
+	fd = open(path, O_WRONLY);
+	if (fd < 0) {
+		SYSERROR("failed to open \"%s\"", path);
+		return -1;
 	}
-	ret = fwrite(buf, buf_size, 1, f);
-	if (ret < 0)
-		SYSERROR("writing id mapping");
-	closeret = fclose(f);
-	if (closeret)
-		SYSERROR("writing id mapping");
-	return ret < 0 ? ret : closeret;
+
+	errno = 0;
+	ret = lxc_write_nointr(fd, buf, buf_size);
+	if (ret != buf_size) {
+		SYSERROR("failed to write %cid mapping to \"%s\"",
+			 idtype == ID_TYPE_UID ? 'u' : 'g', path);
+		close(fd);
+		return -1;
+	}
+	close(fd);
+
+	return 0;
 }
 
 int lxc_map_ids(struct lxc_list *idmap, pid_t pid)
@@ -3852,12 +3880,12 @@ int chown_mapped_root(char *path, struct lxc_conf *conf)
 	char *chownpath = path;
 
 	if (!get_mapped_rootid(conf, ID_TYPE_UID, &val)) {
-		ERROR("No mapping for container root");
+		ERROR("No uid mapping for container root");
 		return -1;
 	}
 	rootuid = (uid_t) val;
 	if (!get_mapped_rootid(conf, ID_TYPE_GID, &val)) {
-		ERROR("No mapping for container root");
+		ERROR("No gid mapping for container root");
 		return -1;
 	}
 	rootgid = (gid_t) val;
@@ -3890,7 +3918,7 @@ int chown_mapped_root(char *path, struct lxc_conf *conf)
 
 	if (rootuid == geteuid()) {
 		// nothing to do
-		INFO("%s: container root is our uid;  no need to chown" ,__func__);
+		INFO("Container root is our uid; no need to chown");
 		return 0;
 	}
 
@@ -4371,7 +4399,7 @@ int lxc_setup(struct lxc_handler *handler)
 
 	if (!lxc_list_empty(&lxc_conf->keepcaps)) {
 		if (!lxc_list_empty(&lxc_conf->caps)) {
-			ERROR("Simultaneously requested dropping and keeping caps");
+			ERROR("Container requests lxc.cap.drop and lxc.cap.keep: either use lxc.cap.drop or lxc.cap.keep, not both.");
 			return -1;
 		}
 		if (dropcaps_except(&lxc_conf->keepcaps)) {
@@ -4432,6 +4460,7 @@ static void lxc_remove_nic(struct lxc_list *it)
 	if (netdev->type == LXC_NET_VETH)
 		free(netdev->priv.veth_attr.pair);
 	free(netdev->upscript);
+	free(netdev->downscript);
 	free(netdev->hwaddr);
 	free(netdev->mtu);
 	free(netdev->ipv4_gateway);
@@ -4577,10 +4606,14 @@ int lxc_clear_cgroups(struct lxc_conf *c, const char *key)
 {
 	struct lxc_list *it,*next;
 	bool all = false;
-	const char *k = key + 11;
+	const char *k = NULL;
 
 	if (strcmp(key, "lxc.cgroup") == 0)
 		all = true;
+	else if (strncmp(key, "lxc.cgroup.", sizeof("lxc.cgroup.")-1) == 0)
+		k = key + sizeof("lxc.cgroup.")-1;
+	else
+		return -1;
 
 	lxc_list_for_each_safe(it, &c->cgroup, next) {
 		struct lxc_cgroup *cg = it->elem;
@@ -4629,11 +4662,15 @@ int lxc_clear_hooks(struct lxc_conf *c, const char *key)
 {
 	struct lxc_list *it,*next;
 	bool all = false, done = false;
-	const char *k = key + 9;
+	const char *k = NULL;
 	int i;
 
 	if (strcmp(key, "lxc.hook") == 0)
 		all = true;
+	else if (strncmp(key, "lxc.hook.", sizeof("lxc.hook.")-1) == 0)
+		k = key + sizeof("lxc.hook.")-1;
+	else
+		return -1;
 
 	for (i=0; i<NUM_LXC_HOOKS; i++) {
 		if (all || strcmp(k, lxchook_names[i]) == 0) {
@@ -4923,7 +4960,7 @@ void suggest_default_idmap(void)
 	}
 	fclose(f);
 
-	f = fopen(subuidfile, "r");
+	f = fopen(subgidfile, "r");
 	if (!f) {
 		ERROR("Your system is not configured with subgids");
 		free(gname);

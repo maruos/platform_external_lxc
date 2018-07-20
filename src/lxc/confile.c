@@ -286,11 +286,19 @@ int lxc_listconfigs(char *retv, int inlen)
 	return fulllen;
 }
 
+static inline bool config_value_empty(const char *value)
+{
+	if (value && strlen(value) > 0)
+		return false;
+
+	return true;
+}
+
 static int config_string_item(char **conf_item, const char *value)
 {
 	char *new_value;
 
-	if (!value || strlen(value) == 0) {
+	if (config_value_empty(value)) {
 		free(*conf_item);
 		*conf_item = NULL;
 		return 0;
@@ -298,7 +306,7 @@ static int config_string_item(char **conf_item, const char *value)
 
 	new_value = strdup(value);
 	if (!new_value) {
-		SYSERROR("failed to strdup '%s': %m", value);
+		SYSERROR("failed to duplicate string \"%s\"", value);
 		return -1;
 	}
 
@@ -373,7 +381,7 @@ static int config_network_type(const char *key, const char *value,
 	struct lxc_netdev *netdev;
 	struct lxc_list *list;
 
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return lxc_clear_config_network(lxc_conf);
 
 	netdev = malloc(sizeof(*netdev));
@@ -698,7 +706,7 @@ static int config_network_hwaddr(const char *key, const char *value,
 		return -1;
 	};
 
-	if (!new_value || strlen(new_value) == 0) {
+	if (config_value_empty(new_value)) {
 		free(new_value);
 		netdev->hwaddr = NULL;
 		return 0;
@@ -746,6 +754,9 @@ static int config_network_ipv4(const char *key, const char *value,
 	struct lxc_inetdev *inetdev;
 	struct lxc_list *list;
 	char *cursor, *slash, *addr = NULL, *bcast = NULL, *prefix = NULL;
+
+	if (config_value_empty(value))
+		return lxc_clear_config_item(lxc_conf, key);
 
 	netdev = network_netdev(key, value, &lxc_conf->network);
 	if (!netdev)
@@ -834,7 +845,7 @@ static int config_network_ipv4_gateway(const char *key, const char *value,
 
 	free(netdev->ipv4_gateway);
 
-	if (!value || strlen(value) == 0) {
+	if (config_value_empty(value)) {
 		netdev->ipv4_gateway = NULL;
 	} else if (!strcmp(value, "auto")) {
 		netdev->ipv4_gateway = NULL;
@@ -869,6 +880,9 @@ static int config_network_ipv6(const char *key, const char *value,
 	struct lxc_list *list;
 	char *slash,*valdup;
 	char *netmask;
+
+	if (config_value_empty(value))
+		return lxc_clear_config_item(lxc_conf, key);
 
 	netdev = network_netdev(key, value, &lxc_conf->network);
 	if (!netdev)
@@ -932,7 +946,7 @@ static int config_network_ipv6_gateway(const char *key, const char *value,
 
 	free(netdev->ipv6_gateway);
 
-	if (!value || strlen(value) == 0) {
+	if (config_value_empty(value)) {
 		netdev->ipv6_gateway = NULL;
 	} else if (!strcmp(value, "auto")) {
 		netdev->ipv6_gateway = NULL;
@@ -1008,7 +1022,7 @@ static int config_hook(const char *key, const char *value,
 {
 	char *copy;
 
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return lxc_clear_hooks(lxc_conf, key);
 
 	copy = strdup(value);
@@ -1061,6 +1075,9 @@ static int config_pts(const char *key, const char *value,
 static int config_start(const char *key, const char *value,
 		      struct lxc_conf *lxc_conf)
 {
+	if (config_value_empty(value))
+		return 0;
+
 	if(strcmp(key, "lxc.start.auto") == 0) {
 		lxc_conf->start_auto = atoi(value);
 		return 0;
@@ -1084,7 +1101,7 @@ static int config_group(const char *key, const char *value,
 	struct lxc_list *grouplist;
 	int ret = -1;
 
-	if (!strlen(value))
+	if (config_value_empty(value))
 		return lxc_clear_groups(lxc_conf);
 
 	groups = strdup(value);
@@ -1179,7 +1196,7 @@ static int config_loglevel(const char *key, const char *value,
 {
 	int newlevel;
 
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return 0;
 
 	if (value[0] >= '0' && value[0] <= '9')
@@ -1262,7 +1279,12 @@ static int sig_parse(const char *signame) {
 static int config_haltsignal(const char *key, const char *value,
 			     struct lxc_conf *lxc_conf)
 {
-	int sig_n = sig_parse(value);
+	int sig_n;
+
+	if (config_value_empty(value))
+		return 0;
+
+	sig_n = sig_parse(value);
 
 	if (sig_n < 0)
 		return -1;
@@ -1272,10 +1294,14 @@ static int config_haltsignal(const char *key, const char *value,
 }
 
 static int config_stopsignal(const char *key, const char *value,
-			  struct lxc_conf *lxc_conf)
+			     struct lxc_conf *lxc_conf)
 {
-	int sig_n = sig_parse(value);
+	int sig_n;
 
+	if (config_value_empty(value))
+		return 0;
+
+	sig_n = sig_parse(value);
 	if (sig_n < 0)
 		return -1;
 	lxc_conf->stopsignal = sig_n;
@@ -1291,7 +1317,7 @@ static int config_cgroup(const char *key, const char *value,
 	struct lxc_list *cglist = NULL;
 	struct lxc_cgroup *cgelem = NULL;
 
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return lxc_clear_cgroups(lxc_conf, key);
 
 	subkey = strstr(key, token);
@@ -1352,7 +1378,7 @@ static int config_idmap(const char *key, const char *value, struct lxc_conf *lxc
 	char type;
 	int ret;
 
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return lxc_clear_idmaps(lxc_conf);
 
 	subkey = strstr(key, token);
@@ -1406,8 +1432,9 @@ out:
 static int config_fstab(const char *key, const char *value,
 			struct lxc_conf *lxc_conf)
 {
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return -1;
+
 	return config_path_item(&lxc_conf->fstab, value);
 }
 
@@ -1439,7 +1466,7 @@ static int config_mount_auto(const char *key, const char *value,
 	int i;
 	int ret = -1;
 
-	if (!value || strlen(value) == 0) {
+	if (config_value_empty(value)) {
 		lxc_conf->auto_mounts = 0;
 		return 0;
 	}
@@ -1482,7 +1509,7 @@ static int config_mount(const char *key, const char *value,
 	char *mntelem;
 	struct lxc_list *mntlist;
 
-	if (!value || strlen(value) == 0)
+	if (config_value_empty(value))
 		return lxc_clear_mount_entries(lxc_conf);
 
 	mntlist = malloc(sizeof(*mntlist));
@@ -1508,7 +1535,7 @@ static int config_cap_keep(const char *key, const char *value,
 	struct lxc_list *keeplist;
 	int ret = -1;
 
-	if (!strlen(value))
+	if (config_value_empty(value))
 		return lxc_clear_config_keepcaps(lxc_conf);
 
 	keepcaps = strdup(value);
@@ -1554,7 +1581,7 @@ static int config_cap_drop(const char *key, const char *value,
 	struct lxc_list *droplist;
 	int ret = -1;
 
-	if (!strlen(value))
+	if (config_value_empty(value))
 		return lxc_clear_config_caps(lxc_conf);
 
 	dropcaps = strdup(value);
@@ -1639,6 +1666,9 @@ static int config_utsname(const char *key, const char *value,
 			  struct lxc_conf *lxc_conf)
 {
 	struct utsname *utsname;
+
+	if (config_value_empty(value))
+		return 0;
 
 	utsname = malloc(sizeof(*utsname));
 	if (!utsname) {

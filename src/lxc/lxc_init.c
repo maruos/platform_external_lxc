@@ -135,7 +135,8 @@ int main(int argc, char *argv[])
 
 		/* Exclude some signals: ILL, SEGV and BUS are likely to
 		 * reveal a bug and we want a core. STOP and KILL cannot be
-		 * handled anyway: they're here for documentation.
+		 * handled anyway: they're here for documentation. 32 and 33
+		 * are not defined.
 		 */
 		if (i == SIGILL ||
 		    i == SIGSEGV ||
@@ -184,7 +185,7 @@ int main(int argc, char *argv[])
 		NOTICE("about to exec '%s'", aargv[0]);
 
 		execvp(aargv[0], aargv);
-		ERROR("failed to exec: '%s' : %m", aargv[0]);
+		ERROR("failed to exec: '%s' : %s", aargv[0], strerror(errno));
 		exit(err);
 	}
 
