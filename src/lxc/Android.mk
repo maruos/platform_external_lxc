@@ -25,50 +25,43 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liblxc
 
 LOCAL_SRC_FILES := \
-	arguments.c arguments.h \
-	bdev.c bdev.h lxc-btrfs.h \
-	commands.c commands.h \
-	start.c start.h \
+	arguments.c \
+	bdev.c \
+	commands.c \
+	start.c \
 	execute.c \
-	monitor.c monitor.h \
+	monitor.c \
 	console.c \
 	freezer.c \
-	error.h error.c \
-	parse.c parse.h \
+	error.c \
+	parse.c \
 	cgfs.c \
-	cgroup.c cgroup.h \
-	lxc.h \
-	initutils.c initutils.h \
-	utils.c utils.h \
-	sync.c sync.h \
-	namespace.h namespace.c \
-	conf.c conf.h \
-	confile.c confile.h \
-	list.h \
-	state.c state.h \
-	log.c log.h \
-	attach.c attach.h \
-	\
-	network.c network.h \
-	nl.c nl.h \
-	rtnl.c rtnl.h \
-	genl.c genl.h \
-	\
-	caps.c caps.h \
-	lxcseccomp.h \
-	mainloop.c mainloop.h \
-	af_unix.c af_unix.h \
-	\
-	lxcutmp.c lxcutmp.h \
-	lxclock.h lxclock.c \
-	lxccontainer.c lxccontainer.h \
-	version.h \
+	cgroup.c \
+	initutils.c \
+	utils.c \
+	sync.c \
+	namespace.c \
+	conf.c \
+	confile.c \
+	state.c \
+	log.c \
+	attach.c \
+	network.c \
+	nl.c \
+	rtnl.c \
+	genl.c \
+	caps.c \
+	mainloop.c \
+	af_unix.c \
+	lxcutmp.c \
+	lxclock.c \
+	lxccontainer.c
 
 # only on bionic
 LOCAL_SRC_FILES += \
-	../include/ifaddrs.c ../include/ifaddrs.h \
-	../include/openpty.c ../include/openpty.h \
-	../include/lxcmntent.c ../include/lxcmntent.h
+	../include/ifaddrs.c \
+	../include/openpty.c \
+	../include/lxcmntent.c
 
 # for static config.h
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
