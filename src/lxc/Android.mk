@@ -66,6 +66,9 @@ LOCAL_SRC_FILES += \
 # for static config.h
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/..
 
+# LXC works fine with warnings so bypass Android's default -Werror flag
+LOCAL_CFLAGS += -Wno-error
+
 LOCAL_CFLAGS += \
 	-DLXCROOTFSMOUNT=\"/system/lib/lxc/rootfs\" \
 	-DLXCPATH=\"/data/maru/containers\" \
