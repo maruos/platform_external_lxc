@@ -1,0 +1,112 @@
+//
+// Copyright 2020 The Maru OS Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+// LXC works fine with warnings so bypass Android's default -Werror flag
+common_CFLAGS = [
+    "-Wno-error",
+    "-DLXCROOTFSMOUNT=\"/system/lib/lxc/rootfs\"",
+    "-DLXCPATH=\"/data/maru/containers\"",
+    "-DLXC_GLOBAL_CONF=\"/system/maru/lxc/etc/lxc/lxc.conf\"",
+    "-DLXCINITDIR=\"/system/maru/lxc/libexec\"",
+    "-DLIBEXECDIR=\"/system/maru/lxc/libexec\"",
+    "-DLXCTEMPLATEDIR=\"/system/maru/lxc/share/lxc/templates\"",
+    "-DLOGPATH=\"/data/maru/containers\"",
+    "-DLXC_DEFAULT_CONFIG=\"/system/maru/lxc/etc/lxc/default.conf\"",
+    "-DLXC_USERNIC_DB=\"/cache/lxc/nics\"",
+    "-DLXC_USERNIC_CONF=\"/system/maru/lxc/etc/lxc/lxc-usernet\"",
+    "-DDEFAULT_CGROUP_PATTERN=\"/lxc/%n\"",
+    "-DRUNTIME_PATH=\"/cache\"",
+    "-DSBINDIR=\"/system/maru/lxc/sbin\"",
+]
+
+cc_defaults {
+    name: "lxc-defaults",
+    cflags: common_CFLAGS,
+    vendor: true,
+    local_include_dirs: ["include", "lxc", "lxc/lsm", "lxc/legacy"],
+}
+
+// -----------------------------------------------------------------------------
+//  liblxc
+
+cc_library_shared {
+    name: "liblxc",
+    defaults: ["lxc-defaults"],
+    srcs: [
+        "include/ifaddrs.c",
+        "include/openpty.c",
+        "include/lxcmntent.c",
+        "lxc/arguments.c",
+        "lxc/bdev.c",
+        "lxc/commands.c",
+        "lxc/start.c",
+        "lxc/execute.c",
+        "lxc/monitor.c",
+        "lxc/console.c",
+        "lxc/freezer.c",
+        "lxc/error.c",
+        "lxc/parse.c",
+        "lxc/cgfs.c",
+        "lxc/cgroup.c",
+        "lxc/initutils.c",
+        "lxc/utils.c",
+        "lxc/sync.c",
+        "lxc/namespace.c",
+        "lxc/conf.c",
+        "lxc/confile.c",
+        "lxc/state.c",
+        "lxc/log.c",
+        "lxc/attach.c",
+        "lxc/network.c",
+        "lxc/nl.c",
+        "lxc/rtnl.c",
+        "lxc/genl.c",
+        "lxc/caps.c",
+        "lxc/mainloop.c",
+        "lxc/af_unix.c",
+        "lxc/lxcutmp.c",
+        "lxc/lxclock.c",
+        "lxc/lxccontainer.c",
+    ],
+}
+
+cc_binary {
+    name: "lxc-start",
+    defaults: ["lxc-defaults"],
+    srcs: ["lxc/lxc_start.c"],
+    shared_libs: ["liblxc"],
+}
+
+cc_binary {
+    name: "lxc-stop",
+    defaults: ["lxc-defaults"],
+    srcs: ["lxc/lxc_stop.c"],
+    shared_libs: ["liblxc"],
+}
+
+cc_binary {
+    name: "lxc-console",
+    defaults: ["lxc-defaults"],
+    srcs: ["lxc/lxc_console.c"],
+    shared_libs: ["liblxc"],
+}
+
+cc_binary {
+    name: "lxc-attach",
+    defaults: ["lxc-defaults"],
+    srcs: ["lxc/lxc_attach.c"],
+    shared_libs: ["liblxc"],
+}
